@@ -1,0 +1,19 @@
+{
+  "name": "Coco Algoritmo",
+  "short_name": "Coco",
+  "description": "Retos de lógica en forma de videojuego.",
+  "lang": "es",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#17122f",
+  "theme_color": "#17122f",
+  "icons": [
+    {
+      "src": "/icono-coco.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
