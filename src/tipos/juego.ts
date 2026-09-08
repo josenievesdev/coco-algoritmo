@@ -1,4 +1,19 @@
-export type ResultadoJuego = "jugando" | "exito" | "error";
+export type ResultadoJuego =
+  | "jugando"
+  | "encaje"
+  | "progreso"
+  | "exito"
+  | "error";
+
+export type EstadoProgresoSecuencia = "completa" | "parcial" | "incorrecta";
+
+export interface EvaluacionSecuencia {
+  estado: EstadoProgresoSecuencia;
+  posicionesCorrectas: boolean[];
+  cantidadEnPosicionCorrecta: number;
+  pasosConsecutivosCorrectos: number;
+  porcentajeProgreso: number;
+}
 
 export interface Juego {
   identificador: string;

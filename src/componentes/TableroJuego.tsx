@@ -6,7 +6,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
@@ -18,13 +18,28 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  motion,
+  useAnimationControls,
+  useReducedMotion,
+} from "framer-motion";
+import AnimacionCafe from "@/componentes/AnimacionCafe";
 import Bloque from "@/componentes/Bloque";
+import NotificacionResultado from "@/componentes/NotificacionResultado";
+import { useEstadoJuego } from "@/juegos/estadoJuego";
 import {
   ejecutarEfectoAcierto,
+  ejecutarEfectoEncaje,
   ejecutarEfectoError,
+  ejecutarEfectoMovimiento,
 } from "@/motor/efectosJuego";
-import { useEstadoJuego } from "@/juegos/estadoJuego";
+import { evaluarProgresoSecuencia } from "@/motor/evaluarProgresoSecuencia";
+import {
+  configurarSonidosActivos,
+  obtenerEstadoSonidos,
+  prepararSonidos,
+} from "@/motor/sonidos";
+import type { ResultadoJuego } from "@/tipos/juego";
 
 interface PropiedadesTableroJuego {
   alSalir: () => void;
@@ -41,46 +56,106 @@ export default function TableroJuego({
   const intentos = useEstadoJuego((estado) => estado.intentos);
   const registrarOrden = useEstadoJuego((estado) => estado.registrarOrden);
   const limpiarResultado = useEstadoJuego((estado) => estado.limpiarResultado);
+  const controlesTablero = useAnimationControls();
+  const reducirMovimiento = useReducedMotion();
   const [identificadorArrastrado, setIdentificadorArrastrado] = useState<
     string | null
   >(null);
+  const [mostrarCelebracion, setMostrarCelebracion] = useState(false);
+  const [sonidosActivos, setSonidosActivos] = useState(obtenerEstadoSonidos);
   const referenciaCompletar = useRef(alCompletar);
+  const referenciaTemporizador = useRef<number | null>(null);
+  const evaluacion = evaluarProgresoSecuencia(
+    secuenciaActual,
+    juegoActual.solucion,
+  );
 
   useEffect(() => {
     referenciaCompletar.current = alCompletar;
   }, [alCompletar]);
 
   useEffect(() => {
-    if (resultado === "exito") {
-      ejecutarEfectoAcierto();
-      const temporizador = window.setTimeout(() => {
-        referenciaCompletar.current?.();
-      }, 1800);
-
-      return () => window.clearTimeout(temporizador);
-    }
-
-    if (resultado === "error") {
-      ejecutarEfectoError();
-      const temporizador = window.setTimeout(limpiarResultado, 620);
-
-      return () => window.clearTimeout(temporizador);
-    }
-  }, [limpiarResultado, resultado]);
+    return () => {
+      if (referenciaTemporizador.current !== null) {
+        window.clearTimeout(referenciaTemporizador.current);
+      }
+    };
+  }, []);
 
   const sensores = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 140, tolerance: 6 },
+      activationConstraint: { delay: 150, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
 
+  function limpiarTemporizador(): void {
+    if (referenciaTemporizador.current !== null) {
+      window.clearTimeout(referenciaTemporizador.current);
+      referenciaTemporizador.current = null;
+    }
+  }
+
+  function mostrarRespuesta(resultadoMovimiento: ResultadoJuego): void {
+    limpiarTemporizador();
+
+    if (resultadoMovimiento === "exito") {
+      ejecutarEfectoAcierto();
+      setMostrarCelebracion(true);
+      if (!reducirMovimiento) {
+        void controlesTablero.start({
+          scale: [1, 1.012, 1],
+          transition: { duration: 0.72, ease: "easeOut" },
+        });
+      }
+      referenciaTemporizador.current = window.setTimeout(() => {
+        setMostrarCelebracion(false);
+        referenciaCompletar.current?.();
+      }, 1550);
+      return;
+    }
+
+    setMostrarCelebracion(false);
+
+    if (
+      resultadoMovimiento === "progreso" ||
+      resultadoMovimiento === "encaje"
+    ) {
+      ejecutarEfectoEncaje();
+      if (!reducirMovimiento) {
+        void controlesTablero.start({
+          scale: [1, 1.008, 1],
+          transition: { duration: 0.34, ease: "easeOut" },
+        });
+      }
+      referenciaTemporizador.current = window.setTimeout(
+        limpiarResultado,
+        1050,
+      );
+      return;
+    }
+
+    ejecutarEfectoError();
+    if (!reducirMovimiento) {
+      void controlesTablero.start({
+        x: [0, -6, 6, -4, 4, 0],
+        transition: { duration: 0.42, ease: "easeInOut" },
+      });
+    }
+    referenciaTemporizador.current = window.setTimeout(
+      limpiarResultado,
+      1250,
+    );
+  }
+
   function comenzarArrastre(evento: DragStartEvent): void {
+    prepararSonidos();
+    ejecutarEfectoMovimiento();
     setIdentificadorArrastrado(String(evento.active.id));
   }
 
@@ -99,7 +174,23 @@ export default function TableroJuego({
       return;
     }
 
-    registrarOrden(arrayMove(secuenciaActual, indiceOrigen, indiceDestino));
+    const nuevaSecuencia = arrayMove(
+      secuenciaActual,
+      indiceOrigen,
+      indiceDestino,
+    );
+    const resultadoMovimiento = registrarOrden(nuevaSecuencia);
+    mostrarRespuesta(resultadoMovimiento);
+  }
+
+  function alternarSonidos(): void {
+    const siguienteEstado = !sonidosActivos;
+    configurarSonidosActivos(siguienteEstado);
+    setSonidosActivos(siguienteEstado);
+
+    if (siguienteEstado) {
+      ejecutarEfectoMovimiento();
+    }
   }
 
   const bloqueArrastrado = identificadorArrastrado
@@ -110,207 +201,246 @@ export default function TableroJuego({
     : -1;
 
   return (
-    <main className="min-h-screen overflow-hidden px-4 py-4 text-[#f9efdb] sm:px-7 sm:py-6 lg:px-10">
-      <div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-7xl flex-col">
-        <header className="flex items-center justify-between border-b border-[#f9efdb]/10 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7c948] font-black text-[#21183f] shadow-[0_4px_0_#b99732]">
-              C
-            </div>
-            <div className="leading-none">
-              <p className="text-base font-black tracking-[-0.06em]">COCO</p>
-              <p className="mt-1 text-[0.55rem] font-bold tracking-[0.3em] text-[#8be0bf]">
-                ALGORITMO
-              </p>
+    <main className="area-segura-juego min-h-dvh overflow-x-clip pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-[#f9efdb] sm:py-6">
+      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col">
+        <header
+          className="sticky z-40 -mx-1 flex items-center justify-between border-b border-[#f9efdb]/10 bg-[#17122f]/88 px-1 pb-4 pt-1 backdrop-blur-xl sm:pb-5"
+          style={{ top: "env(safe-area-inset-top)" }}
+        >
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-4">
+            <button
+              type="button"
+              onClick={alSalir}
+              className="group flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[#f9efdb]/15 bg-[#2b2151] px-3 text-xs font-black tracking-[0.08em] text-[#f9efdb]/72 shadow-[0_4px_0_#0e0a20] transition-all hover:-translate-y-0.5 hover:border-[#f7c948]/55 hover:text-[#f7c948] active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20] sm:h-11 sm:px-3.5"
+              aria-label="Volver al inicio"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                className="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M11.8 4.3 6.1 10l5.7 5.7M6.5 10h8"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="hidden sm:inline">INICIO</span>
+            </button>
+
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7c948] font-black text-[#21183f] shadow-[0_4px_0_#b99732] sm:h-10 sm:w-10">
+                C
+              </div>
+              <div className="hidden leading-none min-[380px]:block">
+                <p className="text-sm font-black tracking-[-0.06em] sm:text-base">
+                  COCO
+                </p>
+                <p className="mt-1 text-[0.5rem] font-bold tracking-[0.27em] text-[#8be0bf] sm:text-[0.55rem]">
+                  ALGORITMO
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-right">
-            <div className="hidden text-[0.6rem] font-black tracking-[0.15em] text-[#f9efdb]/40 sm:block">
-              RETO EN CURSO
-            </div>
-            <div className="rounded-full border border-[#f7c948]/50 px-3 py-1.5 text-xs font-black text-[#f7c948]">
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={alternarSonidos}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-[0_4px_0_#0e0a20] transition-all hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20] sm:h-11 sm:w-11 ${
+                sonidosActivos
+                  ? "border-[#8be0bf]/35 bg-[#8be0bf]/10 text-[#8be0bf]"
+                  : "border-[#f9efdb]/12 bg-[#2b2151] text-[#f9efdb]/35"
+              }`}
+              aria-label={sonidosActivos ? "Desactivar sonidos" : "Activar sonidos"}
+              aria-pressed={sonidosActivos}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+                <path d="M5 10v4h3l4 3V7L8 10H5Z" fill="currentColor" />
+                {sonidosActivos ? (
+                  <path d="M15 9.2c1.5 1.5 1.5 4.1 0 5.6M17.5 7c2.7 2.7 2.7 7.3 0 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                ) : (
+                  <path d="m16 9 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                )}
+              </svg>
+            </button>
+            <div className="rounded-full border border-[#f7c948]/45 px-3 py-1.5 text-[0.68rem] font-black text-[#f7c948] sm:text-xs">
               01 / 01
             </div>
           </div>
         </header>
 
-        <div className="grid flex-1 items-start gap-10 py-9 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-16 lg:py-14">
-          <section className="mx-auto w-full max-w-2xl">
-            <div className="mb-8 flex items-start justify-between gap-5">
+        <div className="grid flex-1 items-start gap-0 py-7 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-14 lg:py-12">
+          <section className="contents lg:mx-auto lg:block lg:w-full lg:max-w-2xl">
+            <div className="order-1 mb-6 flex items-start justify-between gap-5 sm:mb-8">
               <div>
-                <div className="mb-4 flex items-center gap-2 text-[0.65rem] font-black tracking-[0.18em] text-[#8be0bf]">
-                  <span className="h-2 w-2 rounded-full bg-[#8be0bf]" />
+                <div className="mb-3 flex items-center gap-2 text-[0.62rem] font-black tracking-[0.18em] text-[#8be0bf] sm:mb-4 sm:text-[0.65rem]">
+                  <span className="h-2 w-2 rounded-full bg-[#8be0bf] shadow-[0_0_10px_rgba(139,224,191,0.7)]" />
                   RETO COTIDIANO
                 </div>
-                <h1 className="text-4xl font-black leading-none tracking-[-0.07em] text-[#f9efdb] sm:text-6xl">
+                <h1 className="text-[2.6rem] font-black leading-none tracking-[-0.07em] text-[#f9efdb] sm:text-6xl">
                   {juegoActual.nombre}
                 </h1>
-                <p className="mt-4 max-w-lg text-sm leading-6 text-[#f9efdb]/55 sm:text-base">
+                <p className="mt-3 max-w-lg text-sm leading-6 text-[#f9efdb]/55 sm:mt-4 sm:text-base">
                   {juegoActual.instruccion}
                 </p>
               </div>
-              <div className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-3xl border-2 border-[#f7c948] bg-[#f7c948]/15 text-2xl font-black text-[#f7c948] sm:flex">
+              <div className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-3xl border-2 border-[#f7c948] bg-[#f7c948]/15 text-2xl font-black text-[#f7c948] sm:flex lg:hidden">
                 C
               </div>
             </div>
 
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-black tracking-[0.16em] text-[#f9efdb]/45">
-                TU SECUENCIA
-              </p>
-              <p className="text-xs font-bold text-[#f9efdb]/35">
-                Arrastra para ordenar
-              </p>
-            </div>
+            <div className="order-3">
+              <div className="mb-4 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black tracking-[0.16em] text-[#f9efdb]/45">
+                    TU SECUENCIA
+                  </p>
+                  <p className="mt-1 text-[0.68rem] font-bold text-[#f9efdb]/55 sm:hidden">
+                    Mantén y arrastra cada pieza
+                  </p>
+                </div>
+                <p className="hidden text-xs font-bold text-[#f9efdb]/55 sm:block">
+                  Arrastra para ordenar
+                </p>
+              </div>
 
-            <DndContext
-              sensors={sensores}
-              collisionDetection={closestCenter}
-              onDragStart={comenzarArrastre}
-              onDragCancel={() => setIdentificadorArrastrado(null)}
-              onDragEnd={terminarArrastre}
-            >
-              <SortableContext
-                items={secuenciaActual}
-                strategy={verticalListSortingStrategy}
+              <DndContext
+                sensors={sensores}
+                collisionDetection={closestCenter}
+                onDragStart={comenzarArrastre}
+                onDragCancel={() => setIdentificadorArrastrado(null)}
+                onDragEnd={terminarArrastre}
               >
-                <motion.div
-                  layout
-                  role="list"
-                  aria-label="Bloques de la secuencia"
-                  className={`space-y-3 rounded-[1.65rem] border-2 border-dashed border-[#f9efdb]/15 bg-[#21183f]/45 p-3 sm:p-4 ${
-                    resultado === "error" ? "animacion-error border-[#ff725e]/70" : ""
-                  } ${resultado === "exito" ? "border-[#8be0bf]/70" : ""}`}
+                <SortableContext
+                  items={secuenciaActual}
+                  strategy={verticalListSortingStrategy}
                 >
-                  {secuenciaActual.map((bloque, indice) => (
+                  <motion.div
+                    layout
+                    animate={controlesTablero}
+                    role="list"
+                    aria-label="Bloques de la secuencia"
+                    className={`space-y-3 rounded-[1.65rem] border-2 border-dashed bg-[#21183f]/45 p-3 transition-colors sm:p-4 ${
+                      resultado === "error"
+                        ? "border-[#ff725e]/70"
+                        : resultado === "exito"
+                          ? "border-[#8be0bf]/85 shadow-[0_0_32px_rgba(139,224,191,0.12)]"
+                          : evaluacion.pasosConsecutivosCorrectos > 0
+                            ? "border-[#8be0bf]/32"
+                            : "border-[#f9efdb]/15"
+                    }`}
+                  >
+                    {secuenciaActual.map((bloque, indice) => (
+                      <Bloque
+                        key={bloque}
+                        identificador={bloque}
+                        texto={bloque}
+                        indice={indice}
+                        deshabilitado={resultado === "exito"}
+                        estaEnPosicionCorrecta={
+                          evaluacion.posicionesCorrectas[indice]
+                        }
+                      />
+                    ))}
+                  </motion.div>
+                </SortableContext>
+                <DragOverlay dropAnimation={null}>
+                  {bloqueArrastrado ? (
                     <Bloque
-                      key={bloque}
-                      identificador={bloque}
-                      texto={bloque}
-                      indice={indice}
-                      deshabilitado={resultado === "exito"}
+                      identificador={bloqueArrastrado}
+                      texto={bloqueArrastrado}
+                      indice={indiceBloqueArrastrado}
+                      soloVisual
                     />
-                  ))}
-                </motion.div>
-              </SortableContext>
-              <DragOverlay dropAnimation={null}>
-                {bloqueArrastrado ? (
-                  <Bloque
-                    identificador={bloqueArrastrado}
-                    texto={bloqueArrastrado}
-                    indice={indiceBloqueArrastrado}
-                    soloVisual
-                  />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
 
-            <div className="mt-5 flex items-center gap-3 text-xs font-bold text-[#f9efdb]/38">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#f9efdb]/15 text-sm text-[#f7c948]">
-                +
-              </span>
-              <span>La respuesta se descubre al soltar el último bloque.</span>
+              <div
+                className={`mt-5 flex items-center gap-3 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${
+                  evaluacion.estado === "completa"
+                    ? "border-[#8be0bf]/30 bg-[#8be0bf]/8 text-[#8be0bf]"
+                    : "border-transparent text-[#f9efdb]/55"
+                }`}
+              >
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-sm ${
+                    evaluacion.estado === "completa"
+                      ? "border-[#8be0bf]/35 bg-[#8be0bf] text-[#17122f]"
+                      : "border-[#f9efdb]/15 text-[#f7c948]"
+                  }`}
+                >
+                  {evaluacion.estado === "completa" ? "✓" : "+"}
+                </span>
+                <span>
+                  {evaluacion.estado === "completa"
+                    ? "Secuencia completa. El café está listo."
+                    : evaluacion.pasosConsecutivosCorrectos > 0
+                      ? `${evaluacion.pasosConsecutivosCorrectos} pasos ya funcionan en cadena.`
+                      : "El café reaccionará con cada paso que logres conectar."}
+                </span>
+              </div>
             </div>
           </section>
 
-          <aside className="lg:pt-16">
-            <div className="relative overflow-hidden rounded-[1.75rem] border border-[#f9efdb]/15 bg-[#241b48] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.2)] sm:p-6">
+          <aside className="contents lg:block lg:space-y-4">
+            <div className="order-2 mb-6 lg:mb-0">
+              <AnimacionCafe evaluacion={evaluacion} />
+            </div>
+            <div className="relative hidden overflow-hidden rounded-[1.6rem] border border-[#f9efdb]/12 bg-[#241b48] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.2)] lg:block">
               <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[#8be0bf]/10 blur-2xl" />
               <div className="relative">
-                <div className="mb-6 flex items-center justify-between">
-                  <span className="text-[0.62rem] font-black tracking-[0.2em] text-[#f9efdb]/45">
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="text-[0.6rem] font-black tracking-[0.19em] text-[#f9efdb]/42">
                     FICHA DEL RETO
                   </span>
                   <span className="h-2.5 w-2.5 rounded-full bg-[#f7c948] shadow-[0_0_12px_#f7c948]" />
                 </div>
-                <div className="mb-6 flex h-28 items-center justify-center rounded-2xl border border-[#f7c948]/20 bg-[#17122f]/50">
-                  <div className="relative flex h-14 w-20 items-end justify-center rounded-b-[2rem] border-4 border-[#f7c948] bg-[#f7c948]/15 pb-2">
-                    <span className="absolute -right-5 top-2 h-9 w-8 rounded-r-full border-4 border-l-0 border-[#f7c948]" />
-                    <span className="h-2 w-10 rounded-full bg-[#f7c948]/60" />
-                  </div>
-                </div>
-                <h2 className="text-2xl font-black tracking-[-0.05em]">
+                <h2 className="text-xl font-black tracking-[-0.05em]">
                   {juegoActual.nombre}
                 </h2>
-                <p className="mt-3 text-sm leading-6 text-[#f9efdb]/55">
+                <p className="mt-2.5 text-sm leading-6 text-[#f9efdb]/52">
                   {juegoActual.descripcion}
                 </p>
-                <div className="mt-6 border-t border-[#f9efdb]/10 pt-5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-[#f9efdb]/40">INTENTOS</span>
-                    <span className="font-black text-[#f7c948]">
-                      {String(intentos).padStart(2, "0")}
-                    </span>
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-[#f9efdb]/10 pt-4">
+                  <div>
+                    <p className="text-[0.55rem] font-black tracking-[0.13em] text-[#f9efdb]/35">
+                      PROGRESO
+                    </p>
+                    <p className="mt-1 text-lg font-black text-[#8be0bf]">
+                      {evaluacion.porcentajeProgreso}%
+                    </p>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#17122f]">
-                    <motion.div
-                      className="h-full rounded-full bg-[#8be0bf]"
-                      animate={{ width: `${Math.min(100, (intentos / 5) * 100)}%` }}
-                      transition={{ duration: 0.35 }}
-                    />
+                  <div className="border-l border-[#f9efdb]/10 pl-3">
+                    <p className="text-[0.55rem] font-black tracking-[0.13em] text-[#f9efdb]/35">
+                      MOVIMIENTOS
+                    </p>
+                    <p className="mt-1 text-lg font-black text-[#f7c948]">
+                      {String(intentos).padStart(2, "0")}
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
-
-            <AnimatePresence mode="wait">
-              {resultado === "exito" && (
-                <motion.div
-                  key="exito"
-                  initial={{ opacity: 0, y: 12, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="sombra-neon mt-4 rounded-[1.5rem] border-2 border-[#8be0bf] bg-[#8be0bf] p-5 text-[#21183f]"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <p className="text-[0.65rem] font-black tracking-[0.18em]">
-                    SECUENCIA DESBLOQUEADA
-                  </p>
-                  <p className="mt-2 text-2xl font-black tracking-[-0.05em]">
-                    Café listo.
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-[#21183f]/65">
-                    El orden encajó a la perfección.
-                  </p>
-                </motion.div>
-              )}
-              {resultado === "error" && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="sombra-coral mt-4 rounded-[1.5rem] border-2 border-[#ff725e] bg-[#ff725e] p-5 text-[#21183f]"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <p className="text-[0.65rem] font-black tracking-[0.18em]">
-                    ALGO NO ENCAJA
-                  </p>
-                  <p className="mt-2 text-xl font-black tracking-[-0.04em]">
-                    Cambia el orden.
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </aside>
         </div>
 
-        <footer className="flex items-center justify-between border-t border-[#f9efdb]/10 pt-5">
-          <button
-            type="button"
-            onClick={alSalir}
-            className="group inline-flex items-center gap-3 text-xs font-black tracking-[0.12em] text-[#f9efdb]/45 transition-colors hover:text-[#f9efdb]"
-          >
-            <span className="transition-transform group-hover:-translate-x-1">&lt;-</span>
-            VOLVER AL INICIO
-          </button>
-          <span className="hidden text-[0.62rem] font-black tracking-[0.16em] text-[#f9efdb]/25 sm:block">
-            COCO ALGORITMO / SALA DE JUEGO
-          </span>
+        <footer className="flex items-center justify-between border-t border-[#f9efdb]/10 pt-4 text-[0.58rem] font-black tracking-[0.16em] text-[#f9efdb]/25 sm:pt-5">
+          <span>ARRASTRA · CONECTA · RESUELVE</span>
+          <span className="hidden sm:block">COCO ALGORITMO / SALA DE JUEGO</span>
         </footer>
       </div>
+
+      <NotificacionResultado
+        resultado={resultado}
+        evaluacion={evaluacion}
+        numeroMovimiento={intentos}
+        mostrarCelebracion={mostrarCelebracion}
+      />
     </main>
   );
 }

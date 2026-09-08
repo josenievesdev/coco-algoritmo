@@ -2,12 +2,12 @@
 
 import { create } from "zustand";
 import { juegosDisponibles } from "@/datos/juegosDisponibles";
-import { validarSecuencia } from "@/motor/validarSecuencia";
-import type { EstadoJuego, Juego } from "@/tipos/juego";
+import { evaluarProgresoSecuencia } from "@/motor/evaluarProgresoSecuencia";
+import type { EstadoJuego, Juego, ResultadoJuego } from "@/tipos/juego";
 
 interface AccionesJuego {
   iniciarJuego: (juego?: Juego) => void;
-  registrarOrden: (secuencia: string[]) => void;
+  registrarOrden: (secuencia: string[]) => ResultadoJuego;
   limpiarResultado: () => void;
 }
 
@@ -23,7 +23,7 @@ function obtenerSecuenciaInicial(juego: Juego): string[] {
   return [...(juego.secuenciaInicial ?? juego.bloques)];
 }
 
-export const useEstadoJuego = create<EstadoJuegoGlobal>((set) => ({
+export const useEstadoJuego = create<EstadoJuegoGlobal>((set, get) => ({
   juegoActual: juegoInicial,
   secuenciaActual: obtenerSecuenciaInicial(juegoInicial),
   resultado: "jugando",
@@ -39,22 +39,46 @@ export const useEstadoJuego = create<EstadoJuegoGlobal>((set) => ({
   },
 
   registrarOrden: (secuencia) => {
-    set((estadoActual) => {
-      if (estadoActual.resultado === "exito") {
-        return estadoActual;
-      }
+    const estadoActual = get();
 
-      const esCorrecta = validarSecuencia(
-        secuencia,
-        estadoActual.juegoActual.solucion,
-      );
+    if (estadoActual.resultado === "exito") {
+      return "exito";
+    }
 
-      return {
-        secuenciaActual: secuencia,
-        resultado: esCorrecta ? "exito" : "error",
-        intentos: estadoActual.intentos + 1,
-      };
+    const evaluacionAnterior = evaluarProgresoSecuencia(
+      estadoActual.secuenciaActual,
+      estadoActual.juegoActual.solucion,
+    );
+    const evaluacionNueva = evaluarProgresoSecuencia(
+      secuencia,
+      estadoActual.juegoActual.solucion,
+    );
+
+    let resultado: ResultadoJuego = "error";
+
+    if (evaluacionNueva.estado === "completa") {
+      resultado = "exito";
+    } else if (
+      evaluacionNueva.pasosConsecutivosCorrectos >
+      evaluacionAnterior.pasosConsecutivosCorrectos
+    ) {
+      resultado = "progreso";
+    } else if (
+      evaluacionNueva.pasosConsecutivosCorrectos ===
+        evaluacionAnterior.pasosConsecutivosCorrectos &&
+      evaluacionNueva.cantidadEnPosicionCorrecta >
+        evaluacionAnterior.cantidadEnPosicionCorrecta
+    ) {
+      resultado = "encaje";
+    }
+
+    set({
+      secuenciaActual: secuencia,
+      resultado,
+      intentos: estadoActual.intentos + 1,
     });
+
+    return resultado;
   },
 
   limpiarResultado: () => {

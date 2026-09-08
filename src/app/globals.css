@@ -19,6 +19,7 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at 12% 8%, rgba(255, 114, 94, 0.16), transparent 26rem),
     radial-gradient(circle at 88% 75%, rgba(139, 224, 191, 0.12), transparent 30rem),
@@ -55,30 +56,22 @@ button:focus-visible,
   box-shadow: 0 0 0 1px rgba(255, 114, 94, 0.24), 0 12px 34px rgba(255, 114, 94, 0.22);
 }
 
-.animacion-error {
-  animation: sacudida 0.56s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+.area-segura-juego {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
 }
 
-@keyframes sacudida {
-  10%,
-  90% {
-    transform: translateX(-2px);
+@media (min-width: 640px) {
+  .area-segura-juego {
+    padding-left: max(1.75rem, env(safe-area-inset-left));
+    padding-right: max(1.75rem, env(safe-area-inset-right));
   }
+}
 
-  20%,
-  80% {
-    transform: translateX(4px);
-  }
-
-  30%,
-  50%,
-  70% {
-    transform: translateX(-7px);
-  }
-
-  40%,
-  60% {
-    transform: translateX(7px);
+@media (min-width: 1024px) {
+  .area-segura-juego {
+    padding-left: max(2.5rem, env(safe-area-inset-left));
+    padding-right: max(2.5rem, env(safe-area-inset-right));
   }
 }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import PantallaInicio from "@/componentes/PantallaInicio";
 import TableroJuego from "@/componentes/TableroJuego";
 import { useEstadoJuego } from "@/juegos/estadoJuego";
+import { prepararSonidos } from "@/motor/sonidos";
 
 type VistaJuego = "inicio" | "tablero";
 
@@ -12,6 +13,7 @@ export default function ExperienciaJuego() {
   const iniciarJuego = useEstadoJuego((estado) => estado.iniciarJuego);
 
   function comenzarPartida(): void {
+    prepararSonidos();
     iniciarJuego();
     setVista("tablero");
   }

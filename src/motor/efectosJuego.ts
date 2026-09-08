@@ -8,12 +8,21 @@ function vibrarDispositivo(patron: number | number[]): void {
   }
 }
 
+export function ejecutarEfectoMovimiento(): void {
+  reproducirSonido("mover");
+}
+
+export function ejecutarEfectoEncaje(): void {
+  reproducirSonido("encaje");
+  vibrarDispositivo(12);
+}
+
 export function ejecutarEfectoAcierto(): void {
   reproducirSonido("exito");
-  vibrarDispositivo([35, 30, 90]);
+  vibrarDispositivo([28, 24, 72]);
 }
 
 export function ejecutarEfectoError(): void {
   reproducirSonido("error");
-  vibrarDispositivo(45);
+  vibrarDispositivo(32);
 }
