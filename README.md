@@ -17,8 +17,21 @@ Abre `http://localhost:3000` en el navegador.
 ```bash
 npm run lint
 npm run build
-npm run start
 ```
+
+`npm run build` genera el sitio estático en `out/`.
+
+## Despliegue en Cloudflare Pages
+
+El proyecto usa Next.js Static Export (`output: "export"`) y se publica
+como sitio estático en Cloudflare Pages:
+
+- Tipo de proyecto: Pages.
+- Rama de producción: `master`.
+- Framework preset: `Next.js (Static HTML Export)`.
+- Comando de compilación: `npm run build`.
+- Directorio de salida: `out`.
+- Directorio raíz: vacío.
 
 ## Estructura
 
