@@ -1,38 +1,45 @@
 "use client";
 
 import { create } from "zustand";
-import { juegosDisponibles } from "@/datos/juegosDisponibles";
+import { nivelesDisponibles } from "@/datos/juegosDisponibles";
 import { evaluarProgresoSecuencia } from "@/motor/evaluarProgresoSecuencia";
-import type { EstadoJuego, Juego, ResultadoJuego } from "@/tipos/juego";
+import { rotarSecuencia } from "@/motor/mezclarPasos";
+import type { EstadoJuego, Nivel, ResultadoJuego } from "@/tipos/juego";
 
 interface AccionesJuego {
-  iniciarJuego: (juego?: Juego) => void;
+  iniciarNivel: (nivel: Nivel, secuenciaInicial: readonly string[]) => void;
   registrarOrden: (secuencia: string[]) => ResultadoJuego;
   limpiarResultado: () => void;
 }
 
 type EstadoJuegoGlobal = EstadoJuego & AccionesJuego;
 
-const juegoInicial = juegosDisponibles[0];
+const nivelInicial = nivelesDisponibles[0];
 
-if (!juegoInicial) {
-  throw new Error("Coco Algoritmo necesita al menos un juego disponible.");
+if (!nivelInicial) {
+  throw new Error("Coco Algoritmo necesita al menos un nivel disponible.");
 }
 
-function obtenerSecuenciaInicial(juego: Juego): string[] {
-  return [...(juego.secuenciaInicial ?? juego.bloques)];
+export function obtenerSolucion(nivel: Nivel): string[] {
+  return nivel.pasos.map((paso) => paso.identificador);
 }
 
+/**
+ * Estado de la partida en curso. No se guarda en el navegador: el progreso
+ * estable vive en `progresoJuego`.
+ */
 export const useEstadoJuego = create<EstadoJuegoGlobal>((set, get) => ({
-  juegoActual: juegoInicial,
-  secuenciaActual: obtenerSecuenciaInicial(juegoInicial),
+  nivelActual: nivelInicial,
+  // Orden determinista para el primer render; cada partida real llega
+  // mezclada mediante `iniciarNivel`.
+  secuenciaActual: rotarSecuencia(obtenerSolucion(nivelInicial), 1),
   resultado: "jugando",
   intentos: 0,
 
-  iniciarJuego: (juego = juegoInicial) => {
+  iniciarNivel: (nivel, secuenciaInicial) => {
     set({
-      juegoActual: juego,
-      secuenciaActual: obtenerSecuenciaInicial(juego),
+      nivelActual: nivel,
+      secuenciaActual: [...secuenciaInicial],
       resultado: "jugando",
       intentos: 0,
     });
@@ -45,14 +52,12 @@ export const useEstadoJuego = create<EstadoJuegoGlobal>((set, get) => ({
       return "exito";
     }
 
+    const solucion = obtenerSolucion(estadoActual.nivelActual);
     const evaluacionAnterior = evaluarProgresoSecuencia(
       estadoActual.secuenciaActual,
-      estadoActual.juegoActual.solucion,
+      solucion,
     );
-    const evaluacionNueva = evaluarProgresoSecuencia(
-      secuencia,
-      estadoActual.juegoActual.solucion,
-    );
+    const evaluacionNueva = evaluarProgresoSecuencia(secuencia, solucion);
 
     let resultado: ResultadoJuego = "error";
 

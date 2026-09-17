@@ -23,10 +23,12 @@ import {
   useAnimationControls,
   useReducedMotion,
 } from "framer-motion";
-import AnimacionCafe from "@/componentes/AnimacionCafe";
+import AnimacionNivel from "@/componentes/AnimacionNivel";
 import Bloque from "@/componentes/Bloque";
+import BotonVolver from "@/componentes/BotonVolver";
+import IconoNivel from "@/componentes/IconoNivel";
 import NotificacionResultado from "@/componentes/NotificacionResultado";
-import { useEstadoJuego } from "@/juegos/estadoJuego";
+import { obtenerSolucion, useEstadoJuego } from "@/juegos/estadoJuego";
 import {
   ejecutarEfectoAcierto,
   ejecutarEfectoEncaje,
@@ -41,16 +43,29 @@ import {
 } from "@/motor/sonidos";
 import type { ResultadoJuego } from "@/tipos/juego";
 
+const DURACION_CELEBRACION = 2600;
+const DURACION_CELEBRACION_REDUCIDA = 1800;
+
 interface PropiedadesTableroJuego {
+  totalNiveles: number;
+  textoSiguiente?: string;
   alSalir: () => void;
+  alReiniciar: () => void;
+  /** Se ejecuta en cuanto la secuencia es correcta, antes de la animación. */
+  alSuperar?: () => void;
+  /** Se ejecuta al terminar la celebración. */
   alCompletar?: () => void;
 }
 
 export default function TableroJuego({
+  totalNiveles,
+  textoSiguiente,
   alSalir,
+  alReiniciar,
+  alSuperar,
   alCompletar,
 }: PropiedadesTableroJuego) {
-  const juegoActual = useEstadoJuego((estado) => estado.juegoActual);
+  const nivelActual = useEstadoJuego((estado) => estado.nivelActual);
   const secuenciaActual = useEstadoJuego((estado) => estado.secuenciaActual);
   const resultado = useEstadoJuego((estado) => estado.resultado);
   const intentos = useEstadoJuego((estado) => estado.intentos);
@@ -64,15 +79,26 @@ export default function TableroJuego({
   const [mostrarCelebracion, setMostrarCelebracion] = useState(false);
   const [sonidosActivos, setSonidosActivos] = useState(obtenerEstadoSonidos);
   const referenciaCompletar = useRef(alCompletar);
+  const referenciaSuperar = useRef(alSuperar);
   const referenciaTemporizador = useRef<number | null>(null);
   const evaluacion = evaluarProgresoSecuencia(
     secuenciaActual,
-    juegoActual.solucion,
+    obtenerSolucion(nivelActual),
   );
+  const textosPasos = new Map(
+    nivelActual.pasos.map((paso) => [paso.identificador, paso.texto]),
+  );
+  const obtenerTexto = (identificador: string) =>
+    textosPasos.get(identificador) ?? identificador;
+  const numeroNivel = String(nivelActual.numero).padStart(2, "0");
 
   useEffect(() => {
     referenciaCompletar.current = alCompletar;
   }, [alCompletar]);
+
+  useEffect(() => {
+    referenciaSuperar.current = alSuperar;
+  }, [alSuperar]);
 
   useEffect(() => {
     return () => {
@@ -105,6 +131,7 @@ export default function TableroJuego({
     limpiarTemporizador();
 
     if (resultadoMovimiento === "exito") {
+      referenciaSuperar.current?.();
       ejecutarEfectoAcierto();
       setMostrarCelebracion(true);
       if (!reducirMovimiento) {
@@ -116,7 +143,7 @@ export default function TableroJuego({
       referenciaTemporizador.current = window.setTimeout(() => {
         setMostrarCelebracion(false);
         referenciaCompletar.current?.();
-      }, 1550);
+      }, reducirMovimiento ? DURACION_CELEBRACION_REDUCIDA : DURACION_CELEBRACION);
       return;
     }
 
@@ -208,28 +235,11 @@ export default function TableroJuego({
           style={{ top: "env(safe-area-inset-top)" }}
         >
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-4">
-            <button
-              type="button"
-              onClick={alSalir}
-              className="group flex h-10 shrink-0 items-center gap-2 rounded-xl border border-[#f9efdb]/15 bg-[#2b2151] px-3 text-xs font-black tracking-[0.08em] text-[#f9efdb]/72 shadow-[0_4px_0_#0e0a20] transition-all hover:-translate-y-0.5 hover:border-[#f7c948]/55 hover:text-[#f7c948] active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20] sm:h-11 sm:px-3.5"
-              aria-label="Volver al inicio"
-            >
-              <svg
-                viewBox="0 0 20 20"
-                className="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M11.8 4.3 6.1 10l5.7 5.7M6.5 10h8"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span className="hidden sm:inline">INICIO</span>
-            </button>
+            <BotonVolver
+              etiqueta="NIVELES"
+              descripcion="Volver a la selección de niveles"
+              alPulsar={alSalir}
+            />
 
             <div className="flex min-w-0 items-center gap-2.5">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7c948] font-black text-[#21183f] shadow-[0_4px_0_#b99732] sm:h-10 sm:w-10">
@@ -247,6 +257,24 @@ export default function TableroJuego({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={alReiniciar}
+              disabled={resultado === "exito"}
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#f9efdb]/15 bg-[#2b2151] text-[#f9efdb]/72 shadow-[0_4px_0_#0e0a20] transition-all hover:-translate-y-0.5 hover:border-[#f7c948]/55 hover:text-[#f7c948] active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20] disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Reiniciar el nivel con un nuevo orden"
+              title="Reiniciar nivel"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+                <path
+                  d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={alternarSonidos}
@@ -267,8 +295,11 @@ export default function TableroJuego({
                 )}
               </svg>
             </button>
-            <div className="rounded-full border border-[#f7c948]/45 px-3 py-1.5 text-[0.68rem] font-black text-[#f7c948] sm:text-xs">
-              01 / 01
+            <div
+              className="rounded-full border border-[#f7c948]/45 px-3 py-1.5 text-xs font-black tabular-nums text-[#f7c948]"
+              aria-label={`Nivel ${nivelActual.numero} de ${totalNiveles}`}
+            >
+              {numeroNivel} / {String(totalNiveles).padStart(2, "0")}
             </div>
           </div>
         </header>
@@ -279,17 +310,25 @@ export default function TableroJuego({
               <div>
                 <div className="mb-3 flex items-center gap-2 text-[0.62rem] font-black tracking-[0.18em] text-[#8be0bf] sm:mb-4 sm:text-[0.65rem]">
                   <span className="h-2 w-2 rounded-full bg-[#8be0bf] shadow-[0_0_10px_rgba(139,224,191,0.7)]" />
-                  RETO COTIDIANO
+                  NIVEL {numeroNivel} · RETO COTIDIANO
                 </div>
                 <h1 className="text-[2.6rem] font-black leading-none tracking-[-0.07em] text-[#f9efdb] sm:text-6xl">
-                  {juegoActual.nombre}
+                  {nivelActual.titulo}
                 </h1>
                 <p className="mt-3 max-w-lg text-sm leading-6 text-[#f9efdb]/55 sm:mt-4 sm:text-base">
-                  {juegoActual.instruccion}
+                  {nivelActual.instruccion}
                 </p>
               </div>
-              <div className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-3xl border-2 border-[#f7c948] bg-[#f7c948]/15 text-2xl font-black text-[#f7c948] sm:flex lg:hidden">
-                C
+              <div
+                className="hidden h-16 w-16 shrink-0 items-center justify-center rounded-3xl border-2 sm:flex lg:hidden"
+                style={{
+                  borderColor: nivelActual.tema.color,
+                  backgroundColor: `${nivelActual.tema.color}26`,
+                  color: nivelActual.tema.color,
+                }}
+                aria-hidden="true"
+              >
+                <IconoNivel tipo={nivelActual.icono} className="h-9 w-9" />
               </div>
             </div>
 
@@ -338,7 +377,7 @@ export default function TableroJuego({
                       <Bloque
                         key={bloque}
                         identificador={bloque}
-                        texto={bloque}
+                        texto={obtenerTexto(bloque)}
                         indice={indice}
                         deshabilitado={resultado === "exito"}
                         estaEnPosicionCorrecta={
@@ -352,7 +391,7 @@ export default function TableroJuego({
                   {bloqueArrastrado ? (
                     <Bloque
                       identificador={bloqueArrastrado}
-                      texto={bloqueArrastrado}
+                      texto={obtenerTexto(bloqueArrastrado)}
                       indice={indiceBloqueArrastrado}
                       soloVisual
                     />
@@ -378,10 +417,10 @@ export default function TableroJuego({
                 </span>
                 <span>
                   {evaluacion.estado === "completa"
-                    ? "Secuencia completa. El café está listo."
+                    ? nivelActual.mensajes.completa
                     : evaluacion.pasosConsecutivosCorrectos > 0
                       ? `${evaluacion.pasosConsecutivosCorrectos} pasos ya funcionan en cadena.`
-                      : "El café reaccionará con cada paso que logres conectar."}
+                      : nivelActual.mensajes.pendiente}
                 </span>
               </div>
             </div>
@@ -389,7 +428,10 @@ export default function TableroJuego({
 
           <aside className="contents lg:block lg:space-y-4">
             <div className="order-2 mb-6 lg:mb-0">
-              <AnimacionCafe evaluacion={evaluacion} />
+              <AnimacionNivel
+                tipo={nivelActual.tipoAnimacion}
+                evaluacion={evaluacion}
+              />
             </div>
             <div className="relative hidden overflow-hidden rounded-[1.6rem] border border-[#f9efdb]/12 bg-[#241b48] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.2)] lg:block">
               <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[#8be0bf]/10 blur-2xl" />
@@ -401,10 +443,10 @@ export default function TableroJuego({
                   <span className="h-2.5 w-2.5 rounded-full bg-[#f7c948] shadow-[0_0_12px_#f7c948]" />
                 </div>
                 <h2 className="text-xl font-black tracking-[-0.05em]">
-                  {juegoActual.nombre}
+                  {nivelActual.titulo}
                 </h2>
                 <p className="mt-2.5 text-sm leading-6 text-[#f9efdb]/52">
-                  {juegoActual.descripcion}
+                  {nivelActual.descripcion}
                 </p>
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-[#f9efdb]/10 pt-4">
                   <div>
@@ -436,6 +478,8 @@ export default function TableroJuego({
       </div>
 
       <NotificacionResultado
+        nivel={nivelActual}
+        textoSiguiente={textoSiguiente}
         resultado={resultado}
         evaluacion={evaluacion}
         numeroMovimiento={intentos}

@@ -1,10 +1,16 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import AnimacionCafe from "@/componentes/AnimacionCafe";
-import type { EvaluacionSecuencia, ResultadoJuego } from "@/tipos/juego";
+import AnimacionNivel from "@/componentes/AnimacionNivel";
+import type {
+  EvaluacionSecuencia,
+  Nivel,
+  ResultadoJuego,
+} from "@/tipos/juego";
 
 interface PropiedadesNotificacionResultado {
+  nivel: Nivel;
+  textoSiguiente?: string;
   resultado: ResultadoJuego;
   evaluacion: EvaluacionSecuencia;
   numeroMovimiento: number;
@@ -12,6 +18,8 @@ interface PropiedadesNotificacionResultado {
 }
 
 export default function NotificacionResultado({
+  nivel,
+  textoSiguiente,
   resultado,
   evaluacion,
   numeroMovimiento,
@@ -93,7 +101,7 @@ export default function NotificacionResultado({
                     ? `${evaluacion.cantidadEnPosicionCorrecta} piezas ya encajan.`
                     : esEncaje
                       ? "Buen encaje. Ahora conecta los pasos anteriores."
-                      : "Ese orden todavía no prepara el café."}
+                      : nivel.mensajes.error}
                 </p>
               </div>
             </motion.div>
@@ -104,7 +112,7 @@ export default function NotificacionResultado({
       <AnimatePresence>
         {resultado === "exito" && mostrarCelebracion && (
           <motion.div
-            key="celebracion-cafe"
+            key="celebracion-nivel"
             className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center p-4"
             role="status"
             aria-live="assertive"
@@ -139,7 +147,11 @@ export default function NotificacionResultado({
                 animate={reducirMovimiento ? undefined : { x: [0, 850] }}
                 transition={{ duration: 0.8, delay: 0.35, ease: "easeInOut" }}
               />
-              <AnimacionCafe evaluacion={evaluacion} modoCelebracion />
+              <AnimacionNivel
+                tipo={nivel.tipoAnimacion}
+                evaluacion={evaluacion}
+                modoCelebracion
+              />
               <motion.div
                 initial={
                   reducirMovimiento
@@ -186,11 +198,26 @@ export default function NotificacionResultado({
                 }}
                 className="mt-1.5 text-3xl font-black tracking-[-0.06em] text-[#f9efdb]"
               >
-                Café listo.
+                {nivel.mensajes.celebracion}
               </motion.h2>
               <p className="mt-2 text-sm font-bold text-[#f9efdb]/55">
                 Todo encajó en el orden perfecto.
               </p>
+              {textoSiguiente && (
+                <motion.p
+                  initial={
+                    reducirMovimiento ? { opacity: 0 } : { opacity: 0, y: 6 }
+                  }
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    delay: reducirMovimiento ? 0 : 1.1,
+                    duration: reducirMovimiento ? 0.1 : 0.3,
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#f7c948]/40 bg-[#f7c948]/10 px-3 py-1.5 text-xs font-black tracking-[0.08em] text-[#f7c948]"
+                >
+                  {textoSiguiente}
+                </motion.p>
+              )}
             </motion.div>
           </motion.div>
         )}

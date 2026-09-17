@@ -1,32 +1,29 @@
-import type { Juego } from "@/tipos/juego";
+import type { Nivel } from "@/tipos/juego";
 
-export const juegoCafe: Juego = {
+export const nivelCafe: Nivel = {
   identificador: "preparar-cafe",
-  nombre: "Preparar café",
+  identificadorMundo: "primeros-algoritmos",
+  numero: 1,
+  titulo: "Preparar café",
   descripcion:
     "Una receta sencilla se convierte en tu primer reto de lógica.",
   instruccion: "Ordena los pasos para que la taza llegue lista a la mesa.",
-  bloques: [
-    "Calentar agua",
-    "Agregar café",
-    "Agregar azúcar",
-    "Mezclar",
-    "Servir",
+  pasos: [
+    { identificador: "calentar-agua", texto: "Calentar agua" },
+    { identificador: "agregar-cafe", texto: "Agregar café" },
+    { identificador: "agregar-azucar", texto: "Agregar azúcar" },
+    { identificador: "mezclar", texto: "Mezclar" },
+    { identificador: "servir", texto: "Servir" },
   ],
-  solucion: [
-    "Calentar agua",
-    "Agregar café",
-    "Agregar azúcar",
-    "Mezclar",
-    "Servir",
-  ],
-  secuenciaInicial: [
-    "Agregar azúcar",
-    "Servir",
-    "Calentar agua",
-    "Mezclar",
-    "Agregar café",
-  ],
+  icono: "taza",
+  tema: { color: "#f7c948", sombra: "#b99732" },
+  tipoAnimacion: "cafe",
+  mensajes: {
+    pendiente: "El café reaccionará con cada paso que logres conectar.",
+    completa: "Secuencia completa. El café está listo.",
+    error: "Ese orden todavía no prepara el café.",
+    celebracion: "Café listo.",
+  },
 };
 
-export default juegoCafe;
+export default nivelCafe;
