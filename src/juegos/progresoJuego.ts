@@ -3,19 +3,26 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
+import { esIdentificadorHistorico } from "@/datos/identificadoresHistoricos";
 import { nivelesDisponibles } from "@/datos/juegosDisponibles";
+import { esPermutacionDelNivel } from "@/motor/mezclarNivel";
 
 export const CLAVE_PROGRESO = "coco-algoritmo-progreso-v1";
 export const VERSION_PROGRESO = 1;
+export const MAXIMO_NIVELES_GUARDADOS = 128;
+
+const CLAVE_COMPROBACION = "coco-algoritmo-comprobacion";
 
 /** Lo único que se guarda en el navegador. */
-interface DatosProgreso {
+export interface DatosProgreso {
   nivelesCompletados: string[];
   ultimosOrdenes: Record<string, string[]>;
 }
 
 interface EstadoProgreso extends DatosProgreso {
   hidratado: boolean;
+  /** No se guarda: indica si el navegador permite conservar el progreso. */
+  almacenamientoDisponible: boolean;
   marcarNivelCompletado: (identificadorNivel: string) => void;
   registrarOrdenInicial: (
     identificadorNivel: string,
@@ -31,49 +38,30 @@ function esObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
-function esOrdenValido(
-  identificadorNivel: string,
-  orden: unknown,
-): orden is string[] {
-  const nivel = nivelesDisponibles.find(
-    (candidato) => candidato.identificador === identificadorNivel,
-  );
-
-  if (!nivel || !Array.isArray(orden)) {
-    return false;
-  }
-
-  const pasos = nivel.pasos.map((paso) => paso.identificador);
-
-  return (
-    orden.length === pasos.length &&
-    new Set(orden).size === pasos.length &&
-    orden.every((paso) => typeof paso === "string" && pasos.includes(paso))
-  );
-}
-
 /**
  * Convierte cualquier contenido leído del navegador en un progreso válido.
+ *
+ * - `nivelesCompletados`: solo identificadores del registro histórico, sin
+ *   duplicados y con un máximo de `MAXIMO_NIVELES_GUARDADOS`.
+ * - `ultimosOrdenes`: solo niveles del catálogo actual con una permutación
+ *   exacta de sus pasos o fichas.
+ *
  * Lo que no se reconoce se descarta en lugar de bloquear el juego.
  */
-function sanearProgreso(valor: unknown): DatosProgreso {
+export function sanearProgreso(valor: unknown): DatosProgreso {
   if (!esObjeto(valor)) {
     return crearDatosIniciales();
   }
 
-  const identificadoresValidos = new Set(
-    nivelesDisponibles.map((nivel) => nivel.identificador),
-  );
   const nivelesCompletados = Array.isArray(valor.nivelesCompletados)
     ? [
         ...new Set(
           valor.nivelesCompletados.filter(
             (identificador): identificador is string =>
-              typeof identificador === "string" &&
-              identificadoresValidos.has(identificador),
+              esIdentificadorHistorico(identificador),
           ),
         ),
-      ]
+      ].slice(0, MAXIMO_NIVELES_GUARDADOS)
     : [];
   const ultimosOrdenes: Record<string, string[]> = {};
 
@@ -81,7 +69,11 @@ function sanearProgreso(valor: unknown): DatosProgreso {
     for (const [identificadorNivel, orden] of Object.entries(
       valor.ultimosOrdenes,
     )) {
-      if (esOrdenValido(identificadorNivel, orden)) {
+      const nivel = nivelesDisponibles.find(
+        (candidato) => candidato.identificador === identificadorNivel,
+      );
+
+      if (nivel && esPermutacionDelNivel(nivel, orden)) {
         ultimosOrdenes[identificadorNivel] = [...orden];
       }
     }
@@ -90,9 +82,29 @@ function sanearProgreso(valor: unknown): DatosProgreso {
   return { nivelesCompletados, ultimosOrdenes };
 }
 
+/** Comprueba si el navegador permite escribir y borrar en `localStorage`. */
+export function comprobarAlmacenamiento(): boolean {
+  try {
+    window.localStorage.setItem(CLAVE_COMPROBACION, "1");
+    window.localStorage.removeItem(CLAVE_COMPROBACION);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function marcarAlmacenamientoNoDisponible(): void {
+  // Evita un ciclo: el cambio de estado vuelve a intentar guardar, pero en
+  // ese segundo intento la bandera ya es falsa.
+  if (useProgresoJuego.getState().almacenamientoDisponible) {
+    useProgresoJuego.setState({ almacenamientoDisponible: false });
+  }
+}
+
 /**
  * Almacenamiento que nunca lanza errores: si `localStorage` no existe, está
- * bloqueado o contiene JSON corrupto, el juego arranca con progreso inicial.
+ * bloqueado o contiene JSON corrupto, el juego arranca con progreso inicial y
+ * sigue funcionando en memoria.
  */
 const almacenamientoSeguro: PersistStorage<DatosProgreso> = {
   getItem: (nombre) => {
@@ -116,7 +128,7 @@ const almacenamientoSeguro: PersistStorage<DatosProgreso> = {
     try {
       window.localStorage.setItem(nombre, JSON.stringify(valor));
     } catch {
-      // Sin almacenamiento disponible el juego sigue funcionando en memoria.
+      marcarAlmacenamientoNoDisponible();
     }
   },
   removeItem: (nombre) => {
@@ -133,11 +145,16 @@ export const useProgresoJuego = create<EstadoProgreso>()(
     (set, get) => ({
       ...crearDatosIniciales(),
       hidratado: false,
+      almacenamientoDisponible: true,
 
       marcarNivelCompletado: (identificadorNivel) => {
         const { nivelesCompletados } = get();
 
-        if (nivelesCompletados.includes(identificadorNivel)) {
+        if (
+          nivelesCompletados.includes(identificadorNivel) ||
+          !esIdentificadorHistorico(identificadorNivel) ||
+          nivelesCompletados.length >= MAXIMO_NIVELES_GUARDADOS
+        ) {
           return;
         }
 
@@ -167,13 +184,17 @@ export const useProgresoJuego = create<EstadoProgreso>()(
         ultimosOrdenes,
       }),
       // Una versión desconocida no se intenta interpretar: se reinicia.
+      // Si algún día existe la versión 2, aquí deberá transformarse la 1.
       migrate: () => crearDatosIniciales(),
       merge: (guardado, actual) => ({
         ...actual,
         ...sanearProgreso(guardado),
       }),
       onRehydrateStorage: () => () => {
-        useProgresoJuego.setState({ hidratado: true });
+        useProgresoJuego.setState({
+          hidratado: true,
+          almacenamientoDisponible: comprobarAlmacenamiento(),
+        });
       },
     },
   ),

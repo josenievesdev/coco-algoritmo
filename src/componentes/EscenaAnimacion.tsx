@@ -24,6 +24,11 @@ interface PropiedadesEscenaAnimacion {
   etapas: string[];
   colorHalo: string;
   children: (contexto: ContextoEscena) => ReactNode;
+  /**
+   * Indicador bajo la escena. Si no se indica, se usa el indicador de cadena
+   * de las secuencias; `null` lo oculta.
+   */
+  indicador?: ReactNode;
 }
 
 /**
@@ -38,6 +43,7 @@ export default function EscenaAnimacion({
   etapas,
   colorHalo,
   children,
+  indicador,
 }: PropiedadesEscenaAnimacion) {
   const reducirMovimiento = Boolean(useReducedMotion());
   const id = `escena-${useId().replace(/:/g, "")}`;
@@ -174,7 +180,11 @@ export default function EscenaAnimacion({
 
       {!modoCelebracion && (
         <div className="relative z-10 mt-1">
-          <IndicadorProgresoCafe evaluacion={evaluacion} />
+          {indicador === undefined ? (
+            <IndicadorProgresoCafe evaluacion={evaluacion} />
+          ) : (
+            indicador
+          )}
         </div>
       )}
     </section>

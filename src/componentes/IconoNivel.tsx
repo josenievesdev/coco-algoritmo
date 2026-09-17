@@ -87,6 +87,43 @@ export default function IconoNivel({
           <path d="M16 20v3" />
         </>
       )}
+      {tipo === "paraguas" && (
+        <>
+          <path d="M4 16a12 12 0 0 1 24 0Z" />
+          <path d="M16 16v9a3 3 0 0 1-6 0" />
+        </>
+      )}
+      {tipo === "semaforo" && (
+        <>
+          <rect x="10" y="3" width="12" height="22" rx="4" />
+          <circle cx="16" cy="9" r="2.5" />
+          <circle cx="16" cy="18" r="2.5" />
+          <path d="M16 25v4" />
+        </>
+      )}
+      {tipo === "bateria" && (
+        <>
+          <rect x="4" y="10" width="21" height="12" rx="3" />
+          <path d="M28 14v4" />
+          <path d="M8 14v4" />
+          <path d="M16 12.5 13.5 16h5L16 19.5" />
+        </>
+      )}
+      {tipo === "regadera" && (
+        <>
+          <path d="M9 13h13v10a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3V13Z" />
+          <path d="M9 16 3.5 10.5" />
+          <path d="M22 15h2a3 3 0 0 1 0 6h-2" />
+          <path d="M3 6.5v1M6 5v1" />
+        </>
+      )}
+      {tipo === "termometro" && (
+        <>
+          <path d="M13 18V7a3 3 0 0 1 6 0v11a5 5 0 1 1-6 0Z" />
+          <path d="M16 11v10" />
+          <path d="M22 9h3M22 13h2" />
+        </>
+      )}
     </svg>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import AvisoAlmacenamiento from "@/componentes/AvisoAlmacenamiento";
 import BotonVolver from "@/componentes/BotonVolver";
 import EncabezadoMarca from "@/componentes/EncabezadoMarca";
 import IconoNivel from "@/componentes/IconoNivel";
@@ -60,6 +61,7 @@ export default function PantallaNiveles({
           alPulsar={alVolver}
         />
       </EncabezadoMarca>
+      <AvisoAlmacenamiento />
 
       <section className="mx-auto w-full max-w-7xl py-9 sm:py-12">
         <motion.div

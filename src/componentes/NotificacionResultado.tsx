@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import AnimacionNivel from "@/componentes/AnimacionNivel";
 import type {
@@ -8,6 +9,14 @@ import type {
   ResultadoJuego,
 } from "@/tipos/juego";
 
+/** Textos opcionales; sin ellos se usan los del Mundo 1. */
+export interface TextosAviso {
+  tituloError?: string;
+  error?: string;
+  etiquetaExito?: string;
+  detalleExito?: string;
+}
+
 interface PropiedadesNotificacionResultado {
   nivel: Nivel;
   textoSiguiente?: string;
@@ -15,6 +24,9 @@ interface PropiedadesNotificacionResultado {
   evaluacion: EvaluacionSecuencia;
   numeroMovimiento: number;
   mostrarCelebracion: boolean;
+  textosAviso?: TextosAviso;
+  /** Si se indica, la celebración muestra un botón «Continuar». */
+  alContinuar?: () => void;
 }
 
 export default function NotificacionResultado({
@@ -24,8 +36,18 @@ export default function NotificacionResultado({
   evaluacion,
   numeroMovimiento,
   mostrarCelebracion,
+  textosAviso,
+  alContinuar,
 }: PropiedadesNotificacionResultado) {
   const reducirMovimiento = useReducedMotion();
+  const referenciaContinuar = useRef<HTMLButtonElement>(null);
+  const celebracionVisible = resultado === "exito" && mostrarCelebracion;
+
+  useEffect(() => {
+    if (celebracionVisible && alContinuar) {
+      referenciaContinuar.current?.focus();
+    }
+  }, [celebracionVisible, alContinuar]);
   const esProgreso = resultado === "progreso";
   const esEncaje = resultado === "encaje";
   const mostrarAviso = esProgreso || esEncaje || resultado === "error";
@@ -94,14 +116,14 @@ export default function NotificacionResultado({
                     ? "LA CADENA AVANZA"
                     : esEncaje
                       ? "PIEZA EN SU LUGAR"
-                      : "PRUEBA OTRO ENLACE"}
+                      : (textosAviso?.tituloError ?? "PRUEBA OTRO ENLACE")}
                 </p>
                 <p className="mt-1 text-sm font-black leading-tight text-[#f9efdb] sm:text-base">
                   {esProgreso
                     ? `${evaluacion.cantidadEnPosicionCorrecta} piezas ya encajan.`
                     : esEncaje
                       ? "Buen encaje. Ahora conecta los pasos anteriores."
-                      : nivel.mensajes.error}
+                      : (textosAviso?.error ?? nivel.mensajes.error)}
                 </p>
               </div>
             </motion.div>
@@ -110,7 +132,7 @@ export default function NotificacionResultado({
       </AnimatePresence>
 
       <AnimatePresence>
-        {resultado === "exito" && mostrarCelebracion && (
+        {celebracionVisible && (
           <motion.div
             key="celebracion-nivel"
             className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center p-4"
@@ -185,7 +207,7 @@ export default function NotificacionResultado({
                 }}
                 className="mt-4 text-[0.62rem] font-black tracking-[0.2em] text-[#8be0bf]"
               >
-                SECUENCIA DESBLOQUEADA
+                {textosAviso?.etiquetaExito ?? "SECUENCIA DESBLOQUEADA"}
               </motion.p>
               <motion.h2
                 initial={
@@ -201,7 +223,7 @@ export default function NotificacionResultado({
                 {nivel.mensajes.celebracion}
               </motion.h2>
               <p className="mt-2 text-sm font-bold text-[#f9efdb]/55">
-                Todo encajó en el orden perfecto.
+                {textosAviso?.detalleExito ?? "Todo encajó en el orden perfecto."}
               </p>
               {textoSiguiente && (
                 <motion.p
@@ -217,6 +239,19 @@ export default function NotificacionResultado({
                 >
                   {textoSiguiente}
                 </motion.p>
+              )}
+              {alContinuar && (
+                <div className="mt-5">
+                  <button
+                    ref={referenciaContinuar}
+                    type="button"
+                    onClick={alContinuar}
+                    className="pointer-events-auto inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border-2 border-[#f7c948] bg-[#f7c948] px-6 text-sm font-black tracking-[0.08em] text-[#21183f] shadow-[0_5px_0_#b99732] transition-all hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_#b99732]"
+                  >
+                    CONTINUAR
+                    <span aria-hidden="true">&gt;</span>
+                  </button>
+                </div>
               )}
             </motion.div>
           </motion.div>

@@ -5,33 +5,46 @@ import CelebracionMundo from "@/componentes/CelebracionMundo";
 import PantallaInicio from "@/componentes/PantallaInicio";
 import PantallaMundos from "@/componentes/PantallaMundos";
 import PantallaNiveles from "@/componentes/PantallaNiveles";
+import TableroDecision from "@/componentes/TableroDecision";
 import TableroJuego from "@/componentes/TableroJuego";
 import {
   contarNivelesCompletados,
   mundosDisponibles,
+  nivelesDisponibles,
+  obtenerEstadoMundo,
   obtenerEstadoNivel,
   obtenerMundo,
+  obtenerMundoSiguiente,
   obtenerNivelesDeMundo,
   obtenerNivelSiguiente,
 } from "@/datos/juegosDisponibles";
-import { obtenerSolucion, useEstadoJuego } from "@/juegos/estadoJuego";
+import { useEstadoDecision } from "@/juegos/estadoDecision";
+import { useEstadoJuego } from "@/juegos/estadoJuego";
 import { useProgresoJuego } from "@/juegos/progresoJuego";
-import { mezclarPasos } from "@/motor/mezclarPasos";
+import { mezclarOrdenInicial } from "@/motor/mezclarNivel";
 import { prepararSonidos } from "@/motor/sonidos";
-import type { IdentificadorMundo, Nivel } from "@/tipos/juego";
+import type { IdentificadorMundo, Mundo, Nivel } from "@/tipos/juego";
 
 type VistaJuego = "inicio" | "mundos" | "niveles" | "tablero";
 
 const mundoInicial = mundosDisponibles[0];
+const nivelInicial = nivelesDisponibles[0];
+
+function mundoAbierto(mundo: Mundo, nivelesCompletados: readonly string[]): boolean {
+  const estado = obtenerEstadoMundo(mundo, nivelesCompletados);
+  return estado === "disponible" || estado === "completado";
+}
 
 export default function ExperienciaJuego() {
   const [vista, setVista] = useState<VistaJuego>("inicio");
   const [identificadorMundo, setIdentificadorMundo] =
     useState<IdentificadorMundo>(mundoInicial.identificador);
+  const [nivelEnJuego, setNivelEnJuego] = useState<Nivel>(nivelInicial);
   const [numeroPartida, setNumeroPartida] = useState(0);
-  const [mostrarMundoCompletado, setMostrarMundoCompletado] = useState(false);
-  const nivelActual = useEstadoJuego((estado) => estado.nivelActual);
-  const iniciarNivel = useEstadoJuego((estado) => estado.iniciarNivel);
+  const [mundoCelebrado, setMundoCelebrado] =
+    useState<IdentificadorMundo | null>(null);
+  const iniciarNivelSecuencia = useEstadoJuego((estado) => estado.iniciarNivel);
+  const iniciarNivelDecision = useEstadoDecision((estado) => estado.iniciarNivel);
   const nivelesCompletados = useProgresoJuego(
     (estado) => estado.nivelesCompletados,
   );
@@ -47,22 +60,32 @@ export default function ExperienciaJuego() {
 
   function jugarNivel(nivel: Nivel): void {
     const progreso = useProgresoJuego.getState();
+    const mundoDelNivel = obtenerMundo(nivel.identificadorMundo);
 
     if (
       !progreso.hidratado ||
+      !mundoDelNivel ||
+      !mundoAbierto(mundoDelNivel, progreso.nivelesCompletados) ||
       obtenerEstadoNivel(nivel, progreso.nivelesCompletados) === "bloqueado"
     ) {
       return;
     }
 
-    const ordenInicial = mezclarPasos(
-      obtenerSolucion(nivel),
+    const ordenInicial = mezclarOrdenInicial(
+      nivel,
       progreso.ultimosOrdenes[nivel.identificador],
     );
 
     prepararSonidos();
     progreso.registrarOrdenInicial(nivel.identificador, ordenInicial);
-    iniciarNivel(nivel, ordenInicial);
+
+    if (nivel.tipo === "secuencia") {
+      iniciarNivelSecuencia(nivel, ordenInicial);
+    } else {
+      iniciarNivelDecision(nivel, ordenInicial);
+    }
+
+    setNivelEnJuego(nivel);
     setIdentificadorMundo(nivel.identificadorMundo);
     setNumeroPartida((numero) => numero + 1);
     setVista("tablero");
@@ -70,25 +93,28 @@ export default function ExperienciaJuego() {
 
   function elegirMundo(identificador: IdentificadorMundo): void {
     const mundoElegido = obtenerMundo(identificador);
+    const { nivelesCompletados: completados } = useProgresoJuego.getState();
 
-    if (mundoElegido?.estado !== "disponible") {
+    if (!mundoElegido || !mundoAbierto(mundoElegido, completados)) {
       return;
     }
 
+    setMundoCelebrado(null);
     setIdentificadorMundo(identificador);
     setVista("niveles");
   }
 
   function terminarCelebracion(): void {
-    const nivelSiguiente = obtenerNivelSiguiente(nivelActual);
+    const nivelSiguiente = obtenerNivelSiguiente(nivelEnJuego);
 
     if (nivelSiguiente) {
       jugarNivel(nivelSiguiente);
       return;
     }
 
+    setIdentificadorMundo(nivelEnJuego.identificadorMundo);
     setVista("niveles");
-    setMostrarMundoCompletado(true);
+    setMundoCelebrado(nivelEnJuego.identificadorMundo);
   }
 
   if (vista === "inicio") {
@@ -114,6 +140,11 @@ export default function ExperienciaJuego() {
   }
 
   if (vista === "niveles") {
+    const mundoSiguiente = obtenerMundoSiguiente(mundo);
+    const siguienteAbierto =
+      mundoSiguiente !== undefined &&
+      mundoAbierto(mundoSiguiente, nivelesCompletados);
+
     return (
       <>
         <PantallaNiveles
@@ -123,39 +154,51 @@ export default function ExperienciaJuego() {
           alElegirNivel={jugarNivel}
           alVolver={() => setVista("mundos")}
         />
-        {mostrarMundoCompletado && (
+        {mundoCelebrado === mundo.identificador && (
           <CelebracionMundo
             mundo={mundo}
             completados={contarNivelesCompletados(
               mundo.identificador,
               nivelesCompletados,
             )}
-            alVerNiveles={() => setMostrarMundoCompletado(false)}
+            mundoSiguiente={siguienteAbierto ? mundoSiguiente : undefined}
+            alVerNiveles={() => setMundoCelebrado(null)}
             alVerMundos={() => {
-              setMostrarMundoCompletado(false);
+              setMundoCelebrado(null);
               setVista("mundos");
             }}
+            alIrMundoSiguiente={
+              siguienteAbierto
+                ? () => elegirMundo(mundoSiguiente.identificador)
+                : undefined
+            }
           />
         )}
       </>
     );
   }
 
-  const nivelSiguiente = obtenerNivelSiguiente(nivelActual);
+  const nivelSiguiente = obtenerNivelSiguiente(nivelEnJuego);
+  const propiedadesTablero = {
+    totalNiveles: obtenerNivelesDeMundo(nivelEnJuego.identificadorMundo).length,
+    textoSiguiente: nivelSiguiente
+      ? `Siguiente: ${nivelSiguiente.titulo}`
+      : "¡Último nivel del mundo!",
+    alSalir: () => setVista("niveles"),
+    alReiniciar: () => jugarNivel(nivelEnJuego),
+    alSuperar: () => marcarNivelCompletado(nivelEnJuego.identificador),
+    alCompletar: terminarCelebracion,
+  };
 
-  return (
+  return nivelEnJuego.tipo === "secuencia" ? (
     <TableroJuego
-      key={`${nivelActual.identificador}-${numeroPartida}`}
-      totalNiveles={obtenerNivelesDeMundo(nivelActual.identificadorMundo).length}
-      textoSiguiente={
-        nivelSiguiente
-          ? `Siguiente: ${nivelSiguiente.titulo}`
-          : "¡Último nivel del mundo!"
-      }
-      alSalir={() => setVista("niveles")}
-      alReiniciar={() => jugarNivel(nivelActual)}
-      alSuperar={() => marcarNivelCompletado(nivelActual.identificador)}
-      alCompletar={terminarCelebracion}
+      key={`${nivelEnJuego.identificador}-${numeroPartida}`}
+      {...propiedadesTablero}
+    />
+  ) : (
+    <TableroDecision
+      key={`${nivelEnJuego.identificador}-${numeroPartida}`}
+      {...propiedadesTablero}
     />
   );
 }

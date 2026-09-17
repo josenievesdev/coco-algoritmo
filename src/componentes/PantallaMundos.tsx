@@ -1,15 +1,52 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import AvisoAlmacenamiento from "@/componentes/AvisoAlmacenamiento";
 import BotonVolver from "@/componentes/BotonVolver";
 import EncabezadoMarca from "@/componentes/EncabezadoMarca";
 import IconoNivel from "@/componentes/IconoNivel";
 import {
   contarNivelesCompletados,
   mundosDisponibles,
+  obtenerEstadoMundo,
+  obtenerMundo,
+  obtenerNivel,
   obtenerNivelesDeMundo,
 } from "@/datos/juegosDisponibles";
-import type { IdentificadorMundo } from "@/tipos/juego";
+import type {
+  EstadoMundoCalculado,
+  IdentificadorMundo,
+  Mundo,
+} from "@/tipos/juego";
+
+const textoEstadoMundo: Record<EstadoMundoCalculado, string> = {
+  disponible: "DISPONIBLE",
+  completado: "COMPLETADO",
+  bloqueado: "BLOQUEADO",
+  proximamente: "PRÓXIMAMENTE",
+};
+
+function describirRequisito(
+  mundo: Mundo,
+  nivelesCompletados: readonly string[],
+): { titulo: string; logrados: number; total: number } | null {
+  if (!mundo.requisito) {
+    return null;
+  }
+
+  const primerNivel = obtenerNivel(mundo.requisito.niveles[0] ?? "");
+  const mundoRequerido = primerNivel
+    ? obtenerMundo(primerNivel.identificadorMundo)
+    : undefined;
+
+  return {
+    titulo: mundoRequerido?.titulo ?? "el mundo anterior",
+    logrados: mundo.requisito.niveles.filter((identificador) =>
+      nivelesCompletados.includes(identificador),
+    ).length,
+    total: mundo.requisito.niveles.length,
+  };
+}
 
 interface PropiedadesPantallaMundos {
   nivelesCompletados: readonly string[];
@@ -45,6 +82,7 @@ export default function PantallaMundos({
           alPulsar={alVolver}
         />
       </EncabezadoMarca>
+      <AvisoAlmacenamiento />
 
       <section className="mx-auto w-full max-w-7xl py-10 sm:py-14">
         <motion.div
@@ -69,19 +107,32 @@ export default function PantallaMundos({
 
         <ol className="mt-10 grid gap-5 lg:grid-cols-3 lg:gap-6">
           {mundosDisponibles.map((mundo, indice) => {
-            const disponible = mundo.estado === "disponible";
+            const estado: EstadoMundoCalculado = hidratado
+              ? obtenerEstadoMundo(mundo, nivelesCompletados)
+              : mundo.estado === "proximamente"
+                ? "proximamente"
+                : mundo.requisito
+                  ? "bloqueado"
+                  : "disponible";
+            const disponible =
+              estado === "disponible" || estado === "completado";
             const total = obtenerNivelesDeMundo(mundo.identificador).length;
             const completados = contarNivelesCompletados(
               mundo.identificador,
               nivelesCompletados,
             );
+            const requisito = describirRequisito(mundo, nivelesCompletados);
             const numero = String(mundo.numero).padStart(2, "0");
             const textoProgreso = hidratado
               ? `${completados} de ${total}`
               : `– de ${total}`;
             const descripcionAccesible = disponible
-              ? `Mundo ${numero}: ${mundo.titulo}. ${mundo.descripcion} Progreso: ${textoProgreso} niveles superados.`
-              : `Mundo ${numero}: ${mundo.titulo}. ${mundo.descripcion} Próximamente, todavía bloqueado.`;
+              ? `Mundo ${numero}: ${mundo.titulo}. ${mundo.descripcion} ${
+                  estado === "completado" ? "Completado. " : ""
+                }Progreso: ${textoProgreso} niveles superados.`
+              : estado === "bloqueado" && requisito
+                ? `Mundo ${numero}: ${mundo.titulo}. ${mundo.descripcion} Bloqueado: completa ${requisito.titulo} para abrirlo. Llevas ${requisito.logrados} de ${requisito.total}.`
+                : `Mundo ${numero}: ${mundo.titulo}. ${mundo.descripcion} Próximamente, todavía no disponible.`;
 
             return (
               <motion.li
@@ -130,19 +181,20 @@ export default function PantallaMundos({
                     </span>
                     <span
                       className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.7rem] font-black tracking-[0.12em] ${
-                        disponible
-                          ? "bg-[#8be0bf]/15 text-[#8be0bf]"
-                          : "border border-[#f9efdb]/15 text-[#f9efdb]/60"
+                        estado === "completado"
+                          ? "bg-[#8be0bf] text-[#17122f]"
+                          : disponible
+                            ? "bg-[#8be0bf]/15 text-[#8be0bf]"
+                            : "border border-[#f9efdb]/15 text-[#f9efdb]/60"
                       }`}
                     >
-                      {disponible ? (
-                        "DISPONIBLE"
-                      ) : (
-                        <>
-                          <IconoNivel tipo="candado" className="h-3.5 w-3.5" />
-                          PRÓXIMAMENTE
-                        </>
+                      {estado === "completado" && (
+                        <span aria-hidden="true">✓</span>
                       )}
+                      {!disponible && (
+                        <IconoNivel tipo="candado" className="h-3.5 w-3.5" />
+                      )}
+                      {textoEstadoMundo[estado]}
                     </span>
                   </span>
 
@@ -205,6 +257,18 @@ export default function PantallaMundos({
                             }`}
                           />
                         ))}
+                      </span>
+                    </span>
+                  ) : estado === "bloqueado" && requisito ? (
+                    <span className="mt-6 block border-t border-dashed border-[#f9efdb]/12 pt-5">
+                      <span className="flex items-center gap-2 text-sm font-bold text-[#f9efdb]/65">
+                        <IconoNivel tipo="candado" className="h-4 w-4 shrink-0" />
+                        Completa {requisito.titulo} para abrirlo
+                      </span>
+                      <span className="mt-2 block text-xs font-black tabular-nums tracking-[0.1em] text-[#f9efdb]/50">
+                        {hidratado
+                          ? `LLEVAS ${requisito.logrados} DE ${requisito.total}`
+                          : `– DE ${requisito.total}`}
                       </span>
                     </span>
                   ) : (

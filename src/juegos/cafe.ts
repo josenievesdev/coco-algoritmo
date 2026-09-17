@@ -1,6 +1,7 @@
-import type { Nivel } from "@/tipos/juego";
+import type { NivelSecuencia } from "@/tipos/juego";
 
-export const nivelCafe: Nivel = {
+export const nivelCafe: NivelSecuencia = {
+  tipo: "secuencia",
   identificador: "preparar-cafe",
   identificadorMundo: "primeros-algoritmos",
   numero: 1,

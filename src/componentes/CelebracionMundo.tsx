@@ -6,11 +6,19 @@ import IconoNivel from "@/componentes/IconoNivel";
 import { obtenerNivelesDeMundo } from "@/datos/juegosDisponibles";
 import type { Mundo } from "@/tipos/juego";
 
+const clasePrincipal =
+  "rounded-xl border-2 border-[#f7c948] bg-[#f7c948] px-4 text-sm font-black tracking-[0.08em] text-[#21183f] shadow-[0_5px_0_#b99732] transition-all hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_#b99732]";
+const claseSecundaria =
+  "rounded-xl border border-[#f9efdb]/20 bg-[#2b2151] px-4 text-sm font-black tracking-[0.08em] text-[#f9efdb]/80 shadow-[0_5px_0_#0e0a20] transition-all hover:-translate-y-0.5 hover:text-[#f7c948] active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20]";
+
 interface PropiedadesCelebracionMundo {
   mundo: Mundo;
   completados: number;
   alVerNiveles: () => void;
   alVerMundos: () => void;
+  /** Mundo siguiente, solo si ya está abierto. */
+  mundoSiguiente?: Mundo;
+  alIrMundoSiguiente?: () => void;
 }
 
 export default function CelebracionMundo({
@@ -18,6 +26,8 @@ export default function CelebracionMundo({
   completados,
   alVerNiveles,
   alVerMundos,
+  mundoSiguiente,
+  alIrMundoSiguiente,
 }: PropiedadesCelebracionMundo) {
   const reducirMovimiento = useReducedMotion();
   const referenciaBoton = useRef<HTMLButtonElement>(null);
@@ -56,7 +66,7 @@ export default function CelebracionMundo({
           duration: reducirMovimiento ? 0.12 : 0.42,
           ease: [0.16, 1, 0.3, 1],
         }}
-        className="sombra-neon relative w-full max-w-md overflow-hidden rounded-[2rem] border border-[#f7c948]/55 bg-[#211843] px-5 pb-6 pt-7 text-center [perspective:900px] sm:px-7"
+        className="sombra-neon relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overflow-x-hidden rounded-[2rem] border border-[#f7c948]/55 bg-[#211843] px-5 pb-6 pt-7 text-center [perspective:900px] sm:px-7"
       >
         <div
           className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#8be0bf] via-[#f7c948] to-[#ff725e]"
@@ -107,7 +117,7 @@ export default function CelebracionMundo({
           ¡{mundo.titulo} dominado!
         </h2>
         <p className="mt-3 text-base font-bold text-[#f9efdb]/65">
-          Ya sabes convertir tareas cotidianas en secuencias.
+          {mundo.mensajes.completado}
         </p>
 
         <div className="mt-6 rounded-2xl border border-[#f9efdb]/10 bg-[#17122f]/55 p-4">
@@ -137,23 +147,43 @@ export default function CelebracionMundo({
           </ul>
         </div>
 
-        <p className="mt-5 text-sm font-bold text-[#f9efdb]/55">
-          El mundo Decisiones está en construcción. ¡Muy pronto!
-        </p>
+        {mundo.mensajes.siguiente && (
+          <p
+            className={`mt-5 text-sm font-bold ${
+              mundoSiguiente ? "text-[#8be0bf]" : "text-[#f9efdb]/55"
+            }`}
+          >
+            {mundo.mensajes.siguiente}
+          </p>
+        )}
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        {mundoSiguiente && alIrMundoSiguiente && (
           <button
             ref={referenciaBoton}
             type="button"
+            onClick={alIrMundoSiguiente}
+            className={`mt-5 flex min-h-12 w-full items-center justify-center gap-3 ${clasePrincipal}`}
+          >
+            IR A {mundoSiguiente.titulo.toUpperCase()}
+            <span aria-hidden="true">&gt;</span>
+          </button>
+        )}
+
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+          <button
+            ref={mundoSiguiente ? undefined : referenciaBoton}
+            type="button"
             onClick={alVerNiveles}
-            className="flex min-h-12 flex-1 items-center justify-center rounded-xl border-2 border-[#f7c948] bg-[#f7c948] px-4 text-sm font-black tracking-[0.08em] text-[#21183f] shadow-[0_5px_0_#b99732] transition-all hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_#b99732]"
+            className={`flex min-h-12 flex-1 items-center justify-center ${
+              mundoSiguiente ? claseSecundaria : clasePrincipal
+            }`}
           >
             VER NIVELES
           </button>
           <button
             type="button"
             onClick={alVerMundos}
-            className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-[#f9efdb]/20 bg-[#2b2151] px-4 text-sm font-black tracking-[0.08em] text-[#f9efdb]/80 shadow-[0_5px_0_#0e0a20] transition-all hover:-translate-y-0.5 hover:text-[#f7c948] active:translate-y-0.5 active:shadow-[0_2px_0_#0e0a20]"
+            className={`flex min-h-12 flex-1 items-center justify-center ${claseSecundaria}`}
           >
             IR A MUNDOS
           </button>

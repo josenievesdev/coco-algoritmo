@@ -4,23 +4,32 @@ import { create } from "zustand";
 import { nivelesDisponibles } from "@/datos/juegosDisponibles";
 import { evaluarProgresoSecuencia } from "@/motor/evaluarProgresoSecuencia";
 import { rotarSecuencia } from "@/motor/mezclarPasos";
-import type { EstadoJuego, Nivel, ResultadoJuego } from "@/tipos/juego";
+import type {
+  EstadoJuego,
+  NivelSecuencia,
+  ResultadoJuego,
+} from "@/tipos/juego";
 
 interface AccionesJuego {
-  iniciarNivel: (nivel: Nivel, secuenciaInicial: readonly string[]) => void;
+  iniciarNivel: (
+    nivel: NivelSecuencia,
+    secuenciaInicial: readonly string[],
+  ) => void;
   registrarOrden: (secuencia: string[]) => ResultadoJuego;
   limpiarResultado: () => void;
 }
 
 type EstadoJuegoGlobal = EstadoJuego & AccionesJuego;
 
-const nivelInicial = nivelesDisponibles[0];
+const nivelInicial = nivelesDisponibles.find(
+  (nivel): nivel is NivelSecuencia => nivel.tipo === "secuencia",
+);
 
 if (!nivelInicial) {
   throw new Error("Coco Algoritmo necesita al menos un nivel disponible.");
 }
 
-export function obtenerSolucion(nivel: Nivel): string[] {
+export function obtenerSolucion(nivel: NivelSecuencia): string[] {
   return nivel.pasos.map((paso) => paso.identificador);
 }
 
